@@ -4,6 +4,7 @@
 # TODO: add more complex actions (e.g. copy, cut, paste) with the second hand
 
 import argparse
+import atexit
 import json
 from collections import deque
 
@@ -26,6 +27,13 @@ mp_hands = mp.solutions.hands
 
 # Allow mouse to go on the border of the screen
 pyautogui.FAILSAFE = False
+
+def optional_modifier(value):
+    if value is None:
+        return None
+    if value.lower() in ('', 'none', 'null'):
+        return None
+    return value
 
 def main():
 
@@ -55,6 +63,14 @@ def main():
                         default=default_config['scrolling_speed'],
                         type=float, 
                         help='Scrolling speed')
+    parser.add_argument('--drag_modifier',
+                        default=default_config['drag_modifier'],
+                        type=optional_modifier,
+                        help='Keyboard modifier to hold while dragging, e.g. ctrl for Solid Edge rotation')
+    parser.add_argument('--drag_button',
+                        default=default_config['drag_button'],
+                        type=str,
+                        help='Mouse button to hold while dragging')
     parser.add_argument('--min_cutoff_filter', 
                         default=default_config['min_cutoff_filter'],
                         type=float, 
@@ -85,6 +101,8 @@ def main():
     margin = args.margin
     scrolling_threshold = args.scrolling_threshold
     scrolling_speed = args.scrolling_speed
+    drag_modifier = args.drag_modifier
+    drag_button = args.drag_button
     min_cutoff_filter = args.min_cutoff_filter
     beta_filter = args.beta_filter
     minimum_prediction_confidence = args.minimum_prediction_confidence
@@ -110,7 +128,10 @@ def main():
                                         scrolling_threshold=scrolling_threshold,
                                         scrolling_speed=scrolling_speed,
                                         min_cutoff_filter=min_cutoff_filter,
-                                        beta_filter=beta_filter)
+                                        beta_filter=beta_filter,
+                                        drag_modifier=drag_modifier,
+                                        drag_button=drag_button)
+    atexit.register(hand_controller.release_controls)
 
     # Webcam input
     capture = cv2.VideoCapture(0)
@@ -161,6 +182,8 @@ def main():
                                             palm_center,
                                             prediction_confidence,
                                             min_confidence=minimum_prediction_confidence)
+            else:
+                hand_controller.release_controls()
 
             # Stop sequence
             if consecutive_poses == stop_sequence:
@@ -188,6 +211,7 @@ def main():
                 if cv2.waitKey(5) & 0xFF == 27:
                     break
                         
+    hand_controller.release_controls()
     capture.release()
 
 if __name__ == '__main__':

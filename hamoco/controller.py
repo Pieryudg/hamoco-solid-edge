@@ -28,11 +28,24 @@ class HandyMouseController:
         SCROLL = Hand.Pose.THUMB_SIDE
         LEFT_DOWN = Hand.Pose.INDEX_MIDDLE_UP
 
-    def __init__(self, sensitivity=0.5, margin=0.25, scrolling_threshold=0.1, scrolling_speed=1.0, min_cutoff_filter=0.1, beta_filter=0.0):        
+    def __init__(
+        self,
+        sensitivity=0.5,
+        margin=0.25,
+        scrolling_threshold=0.1,
+        scrolling_speed=1.0,
+        min_cutoff_filter=0.1,
+        beta_filter=0.0,
+        drag_modifier=None,
+        drag_button='left',
+    ):
         self.sensitivity = sensitivity
         self.margin = margin
         self.scrolling_threshold = scrolling_threshold
         self.scrolling_speed = scrolling_speed
+        self.drag_modifier = drag_modifier
+        self.drag_button = drag_button
+        self.drag_active = False
         # Motion smoothing
         self.min_cutoff_filter = min_cutoff_filter
         self.beta_filter = beta_filter
@@ -85,6 +98,8 @@ class HandyMouseController:
         return center
 
     def enter_state(self, state):
+        if self.current_mouse_state == self.MouseState.DRAGGING and state != self.MouseState.DRAGGING:
+            self.end_drag()
         self.current_mouse_state = state
         self.current_state_init = self.frame
 
@@ -147,6 +162,34 @@ class HandyMouseController:
     def right_click(self):
         pyautogui.rightClick(_pause=False)
 
+    def begin_drag(self):
+        if self.drag_active:
+            return
+        modifier_pressed = False
+        try:
+            if self.drag_modifier:
+                pyautogui.keyDown(self.drag_modifier, _pause=False)
+                modifier_pressed = True
+            pyautogui.mouseDown(button=self.drag_button, _pause=False)
+            self.drag_active = True
+        except Exception:
+            if modifier_pressed:
+                pyautogui.keyUp(self.drag_modifier, _pause=False)
+            raise
+
+    def end_drag(self):
+        if not self.drag_active:
+            return
+        pyautogui.mouseUp(button=self.drag_button, _pause=False)
+        if self.drag_modifier:
+            pyautogui.keyUp(self.drag_modifier, _pause=False)
+        self.drag_active = False
+
+    def release_controls(self):
+        self.end_drag()
+        self.enter_state(HandyMouseController.MouseState.STANDARD)
+        self.previous_hand_pose = Hand.Pose.UNDEFINED
+
     def operate_mouse(self, hand, palm_center, confidence, min_confidence=0.5):
 
         # Mouse in STANDARD mode
@@ -188,11 +231,11 @@ class HandyMouseController:
 
             # Begin dragging
             if self.current_state_init == self.frame - 1:
-                pyautogui.mouseDown(_pause=False)
+                self.begin_drag()
             
             # Stop dragging if hand pose changed
             elif hand.pose != self.previous_hand_pose and confidence > min_confidence:
-                pyautogui.mouseUp(_pause=False)
+                self.end_drag()
                 self._on_pose_change(hand.pose)
                 self.previous_hand_pose = hand.pose
             

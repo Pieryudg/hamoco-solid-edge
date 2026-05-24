@@ -93,6 +93,12 @@ Configuration files with default values for the control parameters can be found 
 - `INDEX_MIDDLE_UP` : holds the left mouse button down and moves the pointer by following the center of the palm. This is used for selection and drag & drop ;
 - `THUMB_SIDE` : enables vertical scrolling using the first triggering location as origin. Scrolling up or down is done by moving the hand up or down relative to the origin while keeping the same hand pose ;
 
+#### Solid Edge controls
+
+On Windows, the default `nt.json` configuration sets `drag_modifier` to `null` and `drag_button` to `middle`, so the `INDEX_MIDDLE_UP` pose holds the mouse wheel button while moving the pointer. This matches Solid Edge rotation with middle-button drag. The `THUMB_SIDE` pose keeps using vertical mouse-wheel scrolling for zoom in and out. Change `--drag_modifier` and `--drag_button` if a different CAD profile needs another mouse combination.
+
+Windows helper scripts are available under `scripts/`: run `scripts\setup_windows.ps1` once to create a local virtual environment and install dependencies, then run `scripts\run_solid_edge.ps1 -Show` to start with the Solid Edge mouse mapping.
+
 **N.B.** note that, much like a real mouse, the recorded motion of the pointer is *relative* to its previous position. When your mouse reaches the edge of your mouse pad, you simply lift it and land it back somewhere on the pad to start moving again. Similarly, if your hand reaches the edge of the frame, the pointer will stop moving: simply close your fist and move it back into the frame to reset the origin of motion (exactly like when lifting and moving a real mouse).
 
 The various hand poses are illustrated below:

@@ -3,6 +3,8 @@
     "margin": 0.25,
     "scrolling_threshold": 0.1,
     "scrolling_speed": 1.0,
+    "drag_modifier": null,
+    "drag_button": "left",
     "min_cutoff_filter": 0.01,
     "beta_filter": 10.0,
     "minimum_prediction_confidence": 0.8,
