@@ -2,6 +2,7 @@ param(
     [int]$Camera = 0,
     [int]$Width = 960,
     [int]$Height = 540,
+    [int]$CubeWidth = 560,
     [switch]$Control,
     [double]$MinimumPredictionConfidence = 0.8
 )
@@ -23,6 +24,7 @@ $CommandArgs = @(
     "--camera", $Camera.ToString($Culture),
     "--width", $Width.ToString($Culture),
     "--height", $Height.ToString($Culture),
+    "--cube_width", $CubeWidth.ToString($Culture),
     "--minimum_prediction_confidence", $MinimumPredictionConfidence.ToString($Culture)
 )
 

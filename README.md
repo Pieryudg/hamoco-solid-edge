@@ -83,7 +83,7 @@ Quick start
 
 **hamoco** is composed of executable scripts such as *[hamoco-run](#hamoco-run)*, *[hamoco-data](#hamoco-data)*, and *[hamoco-train](#hamoco-train)*, that are listed below. Run these scripts directly from the console, *e.g.* `hamoco-run --sensitivity 0.5 --show`.
 
-For a safe camera-only preview, run `hamoco-test-window`. It opens a test window with live hand landmarks, pose prediction, confidence, and pose scores. Mouse control stays disabled unless `--control` is passed; while the window is focused, press `c` to toggle control and `ESC` or `q` to exit.
+For a safe camera preview, run `hamoco-test-window`. It opens a test window with live hand landmarks, pose prediction, confidence, pose scores, and a 3D cube sandbox for CAD-style controls. Mouse control stays disabled unless `--control` is passed; while the window is focused, press `c` to toggle control and `ESC` or `q` to exit. In the cube panel, use `OPEN` to move, `THUMB_SIDE` to zoom in/out, `INDEX_MIDDLE_UP` to rotate, `INDEX_UP` over the front/side/top zones to snap views, and `CLOSE` to fit the cube to the screen. Keyboard shortcuts are also available: `1` front, `2` side, `3` top, `f` fit, and `r` reset.
 
 ### hamoco-run
 

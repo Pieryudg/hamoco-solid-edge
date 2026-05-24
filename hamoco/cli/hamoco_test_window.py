@@ -3,6 +3,7 @@
 import argparse
 import atexit
 import json
+import math
 import time
 
 import cv2
@@ -13,7 +14,7 @@ import numpy
 from hamoco import Hand, HandyMouseController
 from hamoco.config import __default_config__
 from hamoco.models import __default_model__
-from hamoco.utils import draw_control_bounds, draw_hand_landmarks
+from hamoco.utils import clamp, draw_control_bounds, draw_hand_landmarks
 from hamoco.utils import draw_palm_center, draw_scrolling_origin
 
 
@@ -29,6 +30,259 @@ POSE_COLORS = {
     Hand.Pose.INDEX_MIDDLE_UP: (255, 122, 122),
     Hand.Pose.UNDEFINED: (190, 190, 190),
 }
+
+
+class CubeDemo:
+
+    vertices = numpy.array(
+        [
+            [-1.0, -1.0, -1.0],
+            [1.0, -1.0, -1.0],
+            [1.0, 1.0, -1.0],
+            [-1.0, 1.0, -1.0],
+            [-1.0, -1.0, 1.0],
+            [1.0, -1.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [-1.0, 1.0, 1.0],
+        ],
+        dtype=float,
+    )
+    faces = [
+        ((0, 1, 2, 3), (70, 132, 224)),
+        ((4, 5, 6, 7), (76, 190, 110)),
+        ((0, 1, 5, 4), (236, 180, 82)),
+        ((2, 3, 7, 6), (214, 103, 103)),
+        ((1, 2, 6, 5), (168, 112, 226)),
+        ((0, 3, 7, 4), (82, 175, 214)),
+    ]
+    edges = [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        (4, 5),
+        (5, 6),
+        (6, 7),
+        (7, 4),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ]
+
+    def __init__(self):
+        self.yaw = math.radians(-34.0)
+        self.pitch = math.radians(24.0)
+        self.roll = 0.0
+        self.zoom = 1.0
+        self.pan = numpy.zeros(2, dtype=float)
+        self.active_pose = Hand.Pose.UNDEFINED
+        self.anchor_center = None
+        self.anchor_pan = self.pan.copy()
+        self.anchor_zoom = self.zoom
+        self.anchor_yaw = self.yaw
+        self.anchor_pitch = self.pitch
+        self.last_action = 'Ready'
+        self.last_command_at = 0.0
+        self.command_cooldown = 0.55
+        self.active_view_zone = None
+
+    def reset_interaction(self):
+        self.active_pose = Hand.Pose.UNDEFINED
+        self.anchor_center = None
+        self.active_view_zone = None
+
+    def begin_pose(self, pose, palm_center):
+        self.active_pose = pose
+        self.anchor_center = palm_center.copy()
+        self.anchor_pan = self.pan.copy()
+        self.anchor_zoom = self.zoom
+        self.anchor_yaw = self.yaw
+        self.anchor_pitch = self.pitch
+
+    def apply_front_view(self):
+        self.yaw = 0.0
+        self.pitch = 0.0
+        self.roll = 0.0
+        self.last_action = 'Front view'
+
+    def apply_side_view(self):
+        self.yaw = math.radians(-90.0)
+        self.pitch = 0.0
+        self.roll = 0.0
+        self.last_action = 'Side view'
+
+    def apply_top_view(self):
+        self.yaw = 0.0
+        self.pitch = math.radians(90.0)
+        self.roll = 0.0
+        self.last_action = 'Top view'
+
+    def fit_screen(self):
+        self.zoom = 1.0
+        self.pan = numpy.zeros(2, dtype=float)
+        self.last_action = 'Fit screen'
+
+    def apply_isometric_view(self):
+        self.yaw = math.radians(-34.0)
+        self.pitch = math.radians(24.0)
+        self.roll = 0.0
+        self.last_action = 'Isometric view'
+
+    def handle_keyboard(self, key):
+        if key == ord('1'):
+            self.apply_front_view()
+            return True
+        if key == ord('2'):
+            self.apply_side_view()
+            return True
+        if key == ord('3'):
+            self.apply_top_view()
+            return True
+        if key == ord('f'):
+            self.fit_screen()
+            return True
+        if key == ord('r'):
+            self.apply_isometric_view()
+            self.fit_screen()
+            self.last_action = 'Reset view'
+            return True
+        return False
+
+    def update(self, pose, palm_center, confidence, min_confidence, now=None):
+        if now is None:
+            now = time.perf_counter()
+        if palm_center is None or confidence < min_confidence or pose == Hand.Pose.UNDEFINED:
+            self.reset_interaction()
+            return
+
+        palm_center = numpy.asarray(palm_center, dtype=float)
+        if pose != self.active_pose or self.anchor_center is None:
+            self.begin_pose(pose, palm_center)
+
+        delta = palm_center - self.anchor_center
+        self.active_view_zone = None
+        if pose == Hand.Pose.OPEN:
+            self.pan = self.anchor_pan + numpy.array([delta[0], delta[1]]) * 620.0
+            self.last_action = 'Move'
+        elif pose == Hand.Pose.THUMB_SIDE:
+            zoom_factor = 1.0 + (self.anchor_center[1] - palm_center[1]) * 3.2
+            self.zoom = clamp(self.anchor_zoom * zoom_factor, 0.35, 3.4)
+            self.last_action = 'Zoom'
+        elif pose == Hand.Pose.INDEX_MIDDLE_UP:
+            self.yaw = self.anchor_yaw + delta[0] * math.tau * 1.35
+            self.pitch = clamp(self.anchor_pitch + delta[1] * math.tau * 0.95, -1.48, 1.48)
+            self.last_action = 'Rotation'
+        elif pose == Hand.Pose.INDEX_UP:
+            self.active_view_zone = self.view_zone(palm_center)
+            if now - self.last_command_at >= self.command_cooldown:
+                self.apply_view_zone(self.active_view_zone)
+                self.last_command_at = now
+        elif pose == Hand.Pose.CLOSE:
+            if now - self.last_command_at >= self.command_cooldown:
+                self.fit_screen()
+                self.last_command_at = now
+        elif pose == Hand.Pose.PINKY_UP:
+            if now - self.last_command_at >= self.command_cooldown:
+                self.apply_side_view()
+                self.last_command_at = now
+
+    def view_zone(self, palm_center):
+        if palm_center[0] < 1.0 / 3.0:
+            return 'FRONT'
+        if palm_center[0] < 2.0 / 3.0:
+            return 'SIDE'
+        return 'TOP'
+
+    def apply_view_zone(self, zone):
+        if zone == 'FRONT':
+            self.apply_front_view()
+        elif zone == 'SIDE':
+            self.apply_side_view()
+        elif zone == 'TOP':
+            self.apply_top_view()
+
+    def rotation_matrix(self):
+        cy = math.cos(self.yaw)
+        sy = math.sin(self.yaw)
+        cp = math.cos(self.pitch)
+        sp = math.sin(self.pitch)
+        cr = math.cos(self.roll)
+        sr = math.sin(self.roll)
+        yaw = numpy.array([[cy, 0.0, sy], [0.0, 1.0, 0.0], [-sy, 0.0, cy]])
+        pitch = numpy.array([[1.0, 0.0, 0.0], [0.0, cp, -sp], [0.0, sp, cp]])
+        roll = numpy.array([[cr, -sr, 0.0], [sr, cr, 0.0], [0.0, 0.0, 1.0]])
+        return roll @ pitch @ yaw
+
+    def project(self, width, height):
+        rotated = self.vertices @ self.rotation_matrix().T
+        depth = rotated[:, 2] + 4.2
+        focal = min(width, height) * 1.28 * self.zoom
+        center = numpy.array([width / 2.0, height / 2.0]) + self.pan
+        projected = numpy.column_stack(
+            [
+                center[0] + rotated[:, 0] * focal / depth,
+                center[1] - rotated[:, 1] * focal / depth,
+            ]
+        )
+        return projected.astype(numpy.int32), rotated
+
+    def render(self, height, width, pose, confidence):
+        image = numpy.zeros((height, width, 3), dtype=numpy.uint8)
+        image[:] = (36, 39, 45)
+        cv2.rectangle(image, (0, 0), (width - 1, height - 1), (70, 76, 86), 1)
+
+        projected, rotated = self.project(width, height)
+        face_order = sorted(
+            range(len(self.faces)),
+            key=lambda index: numpy.mean(rotated[list(self.faces[index][0]), 2]),
+        )
+        for face_index in face_order:
+            indices, color = self.faces[face_index]
+            polygon = projected[list(indices)]
+            cv2.fillConvexPoly(image, polygon, color)
+            cv2.polylines(image, [polygon], True, (245, 247, 250), 1, cv2.LINE_AA)
+
+        for edge_start, edge_end in self.edges:
+            cv2.line(image, tuple(projected[edge_start]), tuple(projected[edge_end]), (28, 31, 36), 2, cv2.LINE_AA)
+
+        self.draw_view_selector(image)
+        self.draw_cube_status(image, pose, confidence)
+        return image
+
+    def draw_view_selector(self, image):
+        height, width = image.shape[:2]
+        y0 = 12
+        y1 = 47
+        labels = ['FRONT', 'SIDE', 'TOP']
+        for index, label in enumerate(labels):
+            x0 = int(index * width / 3)
+            x1 = int((index + 1) * width / 3)
+            active = self.active_view_zone == label
+            color = (66, 98, 148) if active else (48, 53, 61)
+            cv2.rectangle(image, (x0 + 8, y0), (x1 - 8, y1), color, -1)
+            cv2.rectangle(image, (x0 + 8, y0), (x1 - 8, y1), (95, 104, 118), 1)
+            text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.48, 1)[0]
+            text_x = x0 + (x1 - x0 - text_size[0]) // 2
+            draw_text(image, label, (text_x, y0 + 23), scale=0.48, color=(238, 240, 244))
+
+        draw_text(image, 'INDEX_UP selects view zone', (14, y1 + 24), scale=0.46, color=(210, 214, 220))
+
+    def draw_cube_status(self, image, pose, confidence):
+        height, width = image.shape[:2]
+        panel_y = height - 96
+        overlay = image.copy()
+        cv2.rectangle(overlay, (0, panel_y), (width, height), (28, 31, 36), -1)
+        cv2.addWeighted(overlay, 0.76, image, 0.24, 0, image)
+
+        pose_name = pose.name.replace('_', ' ')
+        color = POSE_COLORS.get(pose, POSE_COLORS[Hand.Pose.UNDEFINED])
+        draw_text(image, '3D CUBE TEST', (16, panel_y + 25), scale=0.62, color=(245, 247, 250), thickness=2)
+        draw_text(image, self.last_action, (16, panel_y + 52), scale=0.58, color=color, thickness=2)
+        draw_text(image, f'{pose_name} {confidence * 100:4.0f}%', (16, panel_y + 78), scale=0.46, color=(220, 224, 230))
+
+        draw_text(image, 'OPEN move  THUMB zoom  INDEX+MIDDLE rotate', (width - 374, panel_y + 31), scale=0.42, color=(220, 224, 230))
+        draw_text(image, 'CLOSE fit  1/2/3 views  f fit  r reset', (width - 374, panel_y + 57), scale=0.42, color=(220, 224, 230))
 
 
 def optional_modifier(value):
@@ -118,6 +372,7 @@ def build_parser(default_config):
     parser.add_argument('-c', '--camera', type=int, default=0, help='Camera device index')
     parser.add_argument('--width', type=int, default=960, help='Requested capture width')
     parser.add_argument('--height', type=int, default=540, help='Requested capture height')
+    parser.add_argument('--cube_width', type=int, default=560, help='Width of the 3D cube test panel')
     parser.add_argument('--control', action='store_true', help='Enable mouse control while previewing')
     parser.add_argument('-m', '--model', default=default_config['model'], type=str, help='Path to the Keras model')
     parser.add_argument(
@@ -144,6 +399,7 @@ def main():
     parser = build_parser(default_config)
     args = parser.parse_args()
     model_path = __default_model__ if args.model is None else args.model
+    cube_width = max(420, args.cube_width)
     trained_model = keras.models.load_model(model_path)
 
     hand_controller = HandyMouseController(
@@ -167,6 +423,7 @@ def main():
         raise SystemExit(f'Unable to open camera {args.camera}')
 
     control_enabled = args.control
+    cube_demo = CubeDemo()
     last_frame_at = time.perf_counter()
     fps = 0.0
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -174,6 +431,8 @@ def main():
     print('# Hamoco test window is open.')
     print('# Press ESC or q in the preview window to exit.')
     print('# Press c in the preview window to toggle mouse control.')
+    print('# Cube test: OPEN move, THUMB_SIDE zoom, INDEX_MIDDLE_UP rotate, INDEX_UP front/side/top zones, CLOSE fit.')
+    print('# Keyboard shortcuts: 1 front, 2 side, 3 top, f fit, r reset.')
 
     with mp_hands.Hands(
         static_image_mode=False,
@@ -205,6 +464,7 @@ def main():
             probabilities = None
             display_probabilities = None
             inferred_pose = None
+            palm_center = None
             draw_control_bounds(image, hand_controller.accessible_area(image))
 
             if hand_detected:
@@ -246,9 +506,11 @@ def main():
                     hand_controller.scrolling_threshold,
                 )
 
+            cube_demo.update(pose, palm_center, confidence, args.minimum_prediction_confidence, now=now)
             draw_status_bar(image, pose, confidence, fps, control_enabled, inferred=inferred_pose == pose)
             draw_probability_panel(image, display_probabilities, active_pose=pose, inferred_pose=inferred_pose)
-            cv2.imshow(WINDOW_NAME, image)
+            cube_image = cube_demo.render(image.shape[0], cube_width, pose, confidence)
+            cv2.imshow(WINDOW_NAME, numpy.hstack([image, cube_image]))
 
             key = cv2.waitKey(5) & 0xFF
             if key in (27, ord('q')):
@@ -257,6 +519,8 @@ def main():
                 control_enabled = not control_enabled
                 if not control_enabled:
                     hand_controller.release_controls()
+            else:
+                cube_demo.handle_keyboard(key)
 
     hand_controller.release_controls()
     capture.release()
