@@ -29,8 +29,15 @@ args = dict(name='hamoco',
             entry_points={'console_scripts':
                           ['hamoco-run = hamoco.cli.hamoco_run:main',
                            'hamoco-data = hamoco.cli.hamoco_data:main',
-                           'hamoco-train = hamoco.cli.hamoco_train:main']},
-            install_requires=['pyautogui', 'numpy', 'opencv-python', 'mediapipe', 'tensorflow'],
+                           'hamoco-train = hamoco.cli.hamoco_train:main',
+                           'hamoco-test-window = hamoco.cli.hamoco_test_window:main']},
+            install_requires=[
+                'pyautogui',
+                'numpy<2',
+                'opencv-python',
+                'mediapipe==0.10.20',
+                'tensorflow>=2.15,<2.16',
+            ],
             license='GPLv3',
             classifiers=[
                 'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',

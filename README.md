@@ -48,6 +48,7 @@ The installation copies three scripts in the default script folder of `pip`:
 1. `hamoco-run`
 2. `hamoco-data`
 3. `hamoco-train`
+4. `hamoco-test-window`
 
 #### Linux
 
@@ -56,6 +57,16 @@ The default folder should be under `/home/<user>/.local/bin/`. Make sure this lo
 #### Windows
 
 The default folder should be under `C:\Users\<user>\AppData\Local\Programs\Python\<python_version>\Scripts\`. Make sure this location (or the correct one, if different) is included in your `$PATH` environment variable to be able to run the scripts from the console. If not, type the following command `set PATH=%PATH%;C:\path\to\hamoco\scripts\` in the console, or select `Edit the system environment variables` in the search bar, click `Environment Variables…`, click `PATH`, click `Edit...` and add the correct path to the scripts.
+
+For local Windows debugging, use 64-bit Python 3.9, 3.10, or 3.11. The helper script creates a `.venv` virtual environment with the newest compatible Python found by the `py` launcher:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\setup_windows.ps1
+.\scripts\run_test_window.ps1
+```
+
+`run_test_window.ps1` opens a safe camera preview with pose scores and mouse control disabled. Press `c` in the preview to toggle control, or run `.\scripts\run_test_window.ps1 -Control` to start with control enabled. If the wrong camera opens, pass `-Camera 1` or another device index.
 
 ### Requirements:
 
@@ -70,7 +81,9 @@ Quick start
 
 ### Running the scripts
 
-**hamoco** is composed of three executable scripts: *[hamoco-run](#hamoco-run)*, *[hamoco-data](#hamoco-data)*, and *[hamoco-train](#hamoco-train)*, that are listed below. Run these scripts directly from the console, *e.g.* `hamoco-run --sensitivity 0.5 --show`.
+**hamoco** is composed of executable scripts such as *[hamoco-run](#hamoco-run)*, *[hamoco-data](#hamoco-data)*, and *[hamoco-train](#hamoco-train)*, that are listed below. Run these scripts directly from the console, *e.g.* `hamoco-run --sensitivity 0.5 --show`.
+
+For a safe camera-only preview, run `hamoco-test-window`. It opens a test window with live hand landmarks, pose prediction, confidence, and pose scores. Mouse control stays disabled unless `--control` is passed; while the window is focused, press `c` to toggle control and `ESC` or `q` to exit.
 
 ### hamoco-run
 
@@ -97,7 +110,7 @@ Configuration files with default values for the control parameters can be found 
 
 On Windows, the default `nt.json` configuration sets `drag_modifier` to `null` and `drag_button` to `middle`, so the `INDEX_MIDDLE_UP` pose holds the mouse wheel button while moving the pointer. This matches Solid Edge rotation with middle-button drag. The `THUMB_SIDE` pose keeps using vertical mouse-wheel scrolling for zoom in and out. Change `--drag_modifier` and `--drag_button` if a different CAD profile needs another mouse combination.
 
-Windows helper scripts are available under `scripts/`: run `scripts\setup_windows.ps1` once to create a local virtual environment and install dependencies, then run `scripts\run_solid_edge.ps1 -Show` to start with the Solid Edge mouse mapping.
+Windows helper scripts are available under `scripts/`: run `scripts\setup_windows.ps1` once to create a local virtual environment and install dependencies, then run `scripts\run_test_window.ps1` to verify camera tracking. When the preview looks good, run `scripts\run_solid_edge.ps1 -Show` to start with the Solid Edge mouse mapping.
 
 **N.B.** note that, much like a real mouse, the recorded motion of the pointer is *relative* to its previous position. When your mouse reaches the edge of your mouse pad, you simply lift it and land it back somewhere on the pad to start moving again. Similarly, if your hand reaches the edge of the frame, the pointer will stop moving: simply close your fist and move it back into the frame to reset the origin of motion (exactly like when lifting and moving a real mouse).
 

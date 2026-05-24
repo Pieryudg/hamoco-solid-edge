@@ -50,6 +50,52 @@ class Hand:
             processed_landmarks[axis::self.dimension] /= processed_landmarks[axis::self.dimension].std()
         return processed_landmarks.reshape(1,-1)
 
+    @staticmethod
+    def _landmark_xy(landmark):
+        return numpy.array([landmark.x, landmark.y])
+
+    @staticmethod
+    def _distance(point_0, point_1):
+        return numpy.linalg.norm(point_0 - point_1)
+
+    @classmethod
+    def infer_pose_from_landmarks(cls, landmarks):
+        """Infer simple stop gestures directly from MediaPipe landmarks.
+
+        The trained model handles the main classification path. This heuristic is
+        deliberately narrow and only distinguishes a closed fist from the thumb
+        side gesture so that CLOSE remains reliable as a safety/reset pose.
+        """
+        points = [cls._landmark_xy(landmark) for landmark in landmarks]
+        wrist = points[0]
+
+        curled_fingers = 0
+        for mcp_index, pip_index, _, tip_index in [
+            (5, 6, 7, 8),
+            (9, 10, 11, 12),
+            (13, 14, 15, 16),
+            (17, 18, 19, 20),
+        ]:
+            pip_to_wrist = cls._distance(points[pip_index], wrist)
+            tip_to_wrist = cls._distance(points[tip_index], wrist)
+            tip_below_pip = points[tip_index][1] >= points[pip_index][1] - 0.015
+            folded_toward_palm = tip_to_wrist <= pip_to_wrist * 1.08
+            if tip_below_pip and folded_toward_palm:
+                curled_fingers += 1
+
+        if curled_fingers < 4:
+            return None
+
+        palm_center = numpy.mean([points[index] for index in cls.palm_landmarks], axis=0)
+        palm_width = max(cls._distance(points[5], points[17]), 0.001)
+        thumb_side_offset = abs(points[4][0] - palm_center[0])
+        thumb_vertical_offset = abs(points[4][1] - palm_center[1])
+        thumb_sideways = thumb_side_offset > palm_width * 0.65 and thumb_vertical_offset < palm_width * 0.95
+
+        if thumb_sideways:
+            return cls.Pose.THUMB_SIDE
+        return cls.Pose.CLOSE
+
 class HandSnapshot:
 
     def __init__(self, hand=None):

@@ -171,6 +171,10 @@ def main():
                 prediction_confidence = numpy.max(probabilities)
                 predicted_pose = numpy.argmax(probabilities)
                 hand.pose = Hand.Pose(predicted_pose)
+                inferred_pose = Hand.infer_pose_from_landmarks(landmarks)
+                if inferred_pose in (Hand.Pose.CLOSE, Hand.Pose.THUMB_SIDE):
+                    hand.pose = inferred_pose
+                    prediction_confidence = max(prediction_confidence, 0.95)
 
                 # Update consecutive poses queue for stop sequence
                 if hand.pose != previous_pose:

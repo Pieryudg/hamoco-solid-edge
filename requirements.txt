@@ -1,5 +1,5 @@
 pyautogui
-numpy
+numpy<2
 opencv-python
-mediapipe
-tensorflow
+mediapipe==0.10.20
+tensorflow>=2.15,<2.16

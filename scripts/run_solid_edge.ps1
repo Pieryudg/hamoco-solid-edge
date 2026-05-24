@@ -19,7 +19,7 @@ if (Test-Path $VenvPython) {
 }
 
 $Culture = [System.Globalization.CultureInfo]::InvariantCulture
-$Args = @(
+$CommandArgs = @(
     "-m", "hamoco.cli.hamoco_run",
     "--sensitivity", $Sensitivity.ToString($Culture),
     "--scrolling_speed", $ScrollingSpeed.ToString($Culture),
@@ -29,8 +29,8 @@ $Args = @(
 )
 
 if ($Show) {
-    $Args += "--show"
+    $CommandArgs += "--show"
 }
 
 Set-Location $RepoRoot
-& $Python @Args
+& $Python @CommandArgs

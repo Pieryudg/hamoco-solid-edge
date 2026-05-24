@@ -9,6 +9,7 @@ TODO.md
 _notebooks
 custom/*
 env
+.venv
 build
 hamoco.egg-info
 dist
