@@ -66,7 +66,7 @@ class ClassificationModel:
                 self.model.add(Dense(self.num_classes, activation='softmax'))
 
         # Optimizer
-        optimizer = keras.optimizers.adam_v2.Adam(learning_rate=learning_rate)
+        optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
         self.model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
         # Train
