@@ -110,7 +110,19 @@ Configuration files with default values for the control parameters can be found 
 
 On Windows, the default `nt.json` configuration sets `drag_modifier` to `null` and `drag_button` to `middle`, so the `INDEX_MIDDLE_UP` pose holds the mouse wheel button while moving the pointer. This matches Solid Edge rotation with middle-button drag. The `THUMB_SIDE` pose keeps using vertical mouse-wheel scrolling for zoom in and out. Change `--drag_modifier` and `--drag_button` if a different CAD profile needs another mouse combination.
 
-Windows helper scripts are available under `scripts/`: run `scripts\setup_windows.ps1` once to create a local virtual environment and install dependencies, then run `scripts\run_test_window.ps1` to verify camera tracking. When the preview looks good, run `scripts\run_solid_edge.ps1 -Show` to start with the Solid Edge mouse mapping.
+Windows helper scripts are available under `scripts/`: run `scripts\setup_windows.ps1` once to create a local virtual environment and install dependencies, then run `scripts\run_test_window.ps1` to verify camera tracking. When the preview looks good, run `scripts\run_solid_edge.ps1 -Show` to start with the Solid Edge hybrid mapping. The hybrid interface keeps continuous SpaceMouse-style navigation on mouse input (`OPEN` pan, `THUMB_SIDE` zoom, `INDEX_MIDDLE_UP` rotate) and routes discrete view commands through the Solid Edge COM interface when command ids are configured.
+
+Use `scripts\probe_solid_edge.ps1` on the Windows Solid Edge machine to inspect available COM constants. Then pass confirmed command ids directly:
+
+```powershell
+scripts\run_solid_edge.ps1 -Show `
+  -SolidEdgeCommand FIT_VIEW=1234 `
+  -SolidEdgeCommand FRONT_VIEW=1235 `
+  -SolidEdgeCommand SIDE_VIEW=1236 `
+  -SolidEdgeCommand TOP_VIEW=1237
+```
+
+The same values can be stored in a JSON file and loaded with `-SolidEdgeCommandMap path\to\solid_edge_commands.json`.
 
 **N.B.** note that, much like a real mouse, the recorded motion of the pointer is *relative* to its previous position. When your mouse reaches the edge of your mouse pad, you simply lift it and land it back somewhere on the pad to start moving again. Similarly, if your hand reaches the edge of the frame, the pointer will stop moving: simply close your fist and move it back into the frame to reset the origin of motion (exactly like when lifting and moving a real mouse).
 

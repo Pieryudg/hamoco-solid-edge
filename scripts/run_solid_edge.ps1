@@ -4,7 +4,11 @@ param(
     [double]$ScrollingSpeed = 40.0,
     [double]$ScrollingThreshold = 0.1,
     [string]$DragModifier = "none",
-    [string]$DragButton = "middle"
+    [string]$DragButton = "middle",
+    [ValidateSet("mouse", "solid-edge-hybrid")]
+    [string]$Interface = "solid-edge-hybrid",
+    [string]$SolidEdgeCommandMap = "",
+    [string[]]$SolidEdgeCommand = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,11 +29,20 @@ $CommandArgs = @(
     "--scrolling_speed", $ScrollingSpeed.ToString($Culture),
     "--scrolling_threshold", $ScrollingThreshold.ToString($Culture),
     "--drag_modifier", $DragModifier,
-    "--drag_button", $DragButton
+    "--drag_button", $DragButton,
+    "--interface", $Interface
 )
 
 if ($Show) {
     $CommandArgs += "--show"
+}
+
+if ($SolidEdgeCommandMap) {
+    $CommandArgs += @("--solid_edge_command_map", $SolidEdgeCommandMap)
+}
+
+foreach ($Command in $SolidEdgeCommand) {
+    $CommandArgs += @("--solid_edge_command", $Command)
 }
 
 Set-Location $RepoRoot

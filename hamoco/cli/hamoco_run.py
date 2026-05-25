@@ -15,6 +15,7 @@ import keras
 import numpy
 
 from hamoco import Hand, HandyMouseController
+from hamoco.interfaces import MouseAdapter, SolidEdgeCommandClient, SolidEdgeHybridAdapter
 from hamoco.models import __default_model__
 from hamoco.utils import draw_hand_landmarks, draw_palm_center, draw_control_bounds, draw_scrolling_origin
 from hamoco.utils import write_pose, __window_name__
@@ -34,6 +35,32 @@ def optional_modifier(value):
     if value.lower() in ('', 'none', 'null'):
         return None
     return value
+
+
+def solid_edge_command(value):
+    name, separator, command_id = value.partition('=')
+    if separator != '=':
+        raise argparse.ArgumentTypeError('Expected COMMAND=ID, for example FIT_VIEW=1234')
+    name = name.strip().upper()
+    if not name:
+        raise argparse.ArgumentTypeError('Solid Edge command name cannot be empty')
+    try:
+        command_id = int(command_id.strip(), 0)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f'Invalid Solid Edge command id: {command_id}') from exc
+    return name, command_id
+
+
+def load_solid_edge_command_ids(path, command_entries):
+    command_ids = {}
+    if path:
+        with open(path) as command_file:
+            loaded_command_ids = json.load(command_file)
+        for name, command_id in loaded_command_ids.items():
+            command_ids[name.upper()] = int(command_id, 0) if isinstance(command_id, str) else int(command_id)
+    for name, command_id in command_entries or []:
+        command_ids[name] = command_id
+    return command_ids
 
 def main():
 
@@ -95,6 +122,19 @@ def main():
                         type=str,
                         default=default_config['stop_sequence'],
                         help='Sequence of consecutive poses to stop the application')
+    parser.add_argument('--interface',
+                        choices=['mouse', 'solid-edge-hybrid'],
+                        default='mouse',
+                        help='Output interface for recognized gestures')
+    parser.add_argument('--solid_edge_command_map',
+                        type=str,
+                        default=None,
+                        help='JSON file mapping FRONT_VIEW, SIDE_VIEW, TOP_VIEW, FIT_VIEW to Solid Edge command ids')
+    parser.add_argument('--solid_edge_command',
+                        action='append',
+                        type=solid_edge_command,
+                        default=[],
+                        help='Solid Edge command mapping, e.g. FIT_VIEW=1234. Can be passed multiple times')
     args = parser.parse_args()
     # Custom variables linked to parser
     sensitivity = args.sensitivity
@@ -109,6 +149,7 @@ def main():
     model = args.model
     show_feed = args.show
     stop_sequence_litteral = args.stop_sequence
+    interface_name = args.interface
 
     # Prepare stop sequence
     stop_sequence = []
@@ -131,7 +172,13 @@ def main():
                                         beta_filter=beta_filter,
                                         drag_modifier=drag_modifier,
                                         drag_button=drag_button)
-    atexit.register(hand_controller.release_controls)
+    if interface_name == 'solid-edge-hybrid':
+        solid_edge_commands = load_solid_edge_command_ids(args.solid_edge_command_map, args.solid_edge_command)
+        command_client = SolidEdgeCommandClient(command_ids=solid_edge_commands)
+        control_adapter = SolidEdgeHybridAdapter(hand_controller, command_client=command_client)
+    else:
+        control_adapter = MouseAdapter(hand_controller)
+    atexit.register(control_adapter.release_controls)
 
     # Webcam input
     capture = cv2.VideoCapture(0)
@@ -182,12 +229,12 @@ def main():
                     previous_pose = hand.pose
 
                 # Perform the appropriate mouse action
-                hand_controller.operate_mouse(hand, 
-                                            palm_center,
-                                            prediction_confidence,
-                                            min_confidence=minimum_prediction_confidence)
+                control_adapter.operate(hand,
+                                        palm_center,
+                                        prediction_confidence,
+                                        min_confidence=minimum_prediction_confidence)
             else:
-                hand_controller.release_controls()
+                control_adapter.release_controls()
 
             # Stop sequence
             if consecutive_poses == stop_sequence:
@@ -215,7 +262,7 @@ def main():
                 if cv2.waitKey(5) & 0xFF == 27:
                     break
                         
-    hand_controller.release_controls()
+    control_adapter.release_controls()
     capture.release()
 
 if __name__ == '__main__':

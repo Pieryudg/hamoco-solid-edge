@@ -13,6 +13,7 @@ import numpy
 
 from hamoco import Hand, HandyMouseController
 from hamoco.config import __default_config__
+from hamoco.interfaces import CADCommand, CADGestureMapper
 from hamoco.models import __default_model__
 from hamoco.utils import clamp, draw_control_bounds, draw_hand_landmarks
 from hamoco.utils import draw_palm_center, draw_scrolling_origin
@@ -76,25 +77,19 @@ class CubeDemo:
         self.roll = 0.0
         self.zoom = 1.0
         self.pan = numpy.zeros(2, dtype=float)
-        self.active_pose = Hand.Pose.UNDEFINED
-        self.anchor_center = None
         self.anchor_pan = self.pan.copy()
         self.anchor_zoom = self.zoom
         self.anchor_yaw = self.yaw
         self.anchor_pitch = self.pitch
         self.last_action = 'Ready'
-        self.last_command_at = 0.0
-        self.command_cooldown = 0.55
         self.active_view_zone = None
+        self.gesture_mapper = CADGestureMapper()
 
     def reset_interaction(self):
-        self.active_pose = Hand.Pose.UNDEFINED
-        self.anchor_center = None
+        self.gesture_mapper.reset_interaction()
         self.active_view_zone = None
 
-    def begin_pose(self, pose, palm_center):
-        self.active_pose = pose
-        self.anchor_center = palm_center.copy()
+    def begin_navigation(self):
         self.anchor_pan = self.pan.copy()
         self.anchor_zoom = self.zoom
         self.anchor_yaw = self.yaw
@@ -150,57 +145,33 @@ class CubeDemo:
         return False
 
     def update(self, pose, palm_center, confidence, min_confidence, now=None):
-        if now is None:
-            now = time.perf_counter()
-        if palm_center is None or confidence < min_confidence or pose == Hand.Pose.UNDEFINED:
-            self.reset_interaction()
+        navigation = self.gesture_mapper.update(pose, palm_center, confidence, min_confidence, now=now)
+        self.active_view_zone = navigation.view_zone
+        if not navigation.active:
             return
 
-        palm_center = numpy.asarray(palm_center, dtype=float)
-        if pose != self.active_pose or self.anchor_center is None:
-            self.begin_pose(pose, palm_center)
+        if navigation.pose_started:
+            self.begin_navigation()
 
-        delta = palm_center - self.anchor_center
-        self.active_view_zone = None
-        if pose == Hand.Pose.OPEN:
-            self.pan = self.anchor_pan + numpy.array([delta[0], delta[1]]) * 620.0
+        if navigation.source_pose == Hand.Pose.OPEN:
+            self.pan = self.anchor_pan + numpy.array([navigation.pan_x, navigation.pan_y]) * 620.0
             self.last_action = 'Move'
-        elif pose == Hand.Pose.THUMB_SIDE:
-            zoom_factor = 1.0 + (self.anchor_center[1] - palm_center[1]) * 3.2
+        elif navigation.source_pose == Hand.Pose.THUMB_SIDE:
+            zoom_factor = 1.0 + navigation.zoom_z * 3.2
             self.zoom = clamp(self.anchor_zoom * zoom_factor, 0.35, 3.4)
             self.last_action = 'Zoom'
-        elif pose == Hand.Pose.INDEX_MIDDLE_UP:
-            self.yaw = self.anchor_yaw + delta[0] * math.tau * 1.35
-            self.pitch = clamp(self.anchor_pitch + delta[1] * math.tau * 0.95, -1.48, 1.48)
+        elif navigation.source_pose == Hand.Pose.INDEX_MIDDLE_UP:
+            self.yaw = self.anchor_yaw + navigation.rotate_y * math.tau * 1.35
+            self.pitch = clamp(self.anchor_pitch + navigation.rotate_x * math.tau * 0.95, -1.48, 1.48)
             self.last_action = 'Rotation'
-        elif pose == Hand.Pose.INDEX_UP:
-            self.active_view_zone = self.view_zone(palm_center)
-            if now - self.last_command_at >= self.command_cooldown:
-                self.apply_view_zone(self.active_view_zone)
-                self.last_command_at = now
-        elif pose == Hand.Pose.CLOSE:
-            if now - self.last_command_at >= self.command_cooldown:
-                self.fit_screen()
-                self.last_command_at = now
-        elif pose == Hand.Pose.PINKY_UP:
-            if now - self.last_command_at >= self.command_cooldown:
-                self.apply_side_view()
-                self.last_command_at = now
-
-    def view_zone(self, palm_center):
-        if palm_center[0] < 1.0 / 3.0:
-            return 'FRONT'
-        if palm_center[0] < 2.0 / 3.0:
-            return 'SIDE'
-        return 'TOP'
-
-    def apply_view_zone(self, zone):
-        if zone == 'FRONT':
+        if navigation.command is CADCommand.FRONT_VIEW:
             self.apply_front_view()
-        elif zone == 'SIDE':
+        elif navigation.command is CADCommand.SIDE_VIEW:
             self.apply_side_view()
-        elif zone == 'TOP':
+        elif navigation.command is CADCommand.TOP_VIEW:
             self.apply_top_view()
+        elif navigation.command is CADCommand.FIT_VIEW:
+            self.fit_screen()
 
     def rotation_matrix(self):
         cy = math.cos(self.yaw)

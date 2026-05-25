@@ -30,7 +30,11 @@ class ClassificationModel:
     def read_dataset(self, path_to_dataset):
         # list of sample files
         paths_to_dataset_files = os.listdir(path_to_dataset)
-        paths_to_dataset_files = [os.path.join(path_to_dataset, f) for f in paths_to_dataset_files if f.endswith('.dat')]
+        paths_to_dataset_files = [
+            os.path.join(path_to_dataset, f)
+            for f in paths_to_dataset_files
+            if f.endswith('.dat') and not f.startswith('._')
+        ]
         paths_to_dataset_files.sort()
         n_samples = len(paths_to_dataset_files)
 
